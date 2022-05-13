@@ -15,12 +15,42 @@ async function run() {
     try{
         await client.connect();
         const servicesCollection = client.db("doctors_portal").collection("services");
+        const bookingCollection = client.db("doctors_portal").collection("bookings");
         app.get('/services', async(req, res)=>{
             const query = {};
             const cursor = servicesCollection.find(query);
             const services = await cursor.toArray();
             res.send(services);
+          });
+
+        app.get('/available', async (req, res)=>{
+          const date = req.query.date || 'May 11, 2022';
+          const services= await servicesCollection.find().toArray()
+
+          const query = {date: date};
+          const bookings = await bookingCollection.find(query).toArray()
+
+          services.forEach(service=>{
+            const serviceBooking = bookings.filter(b=>b.treatment===service.name);
+            const booked = serviceBooking.map(s=>s.slot)
+            // service.booked = booked;
+            const availableSlots = service.slots.filter(s=>!booked.includes(s))
+            service.availableSlots = availableSlots;
           })
+          res.send(services)
+        })
+
+
+        app.post('/bookings', async (req, res)=>{
+          const booking = req.body;
+          const query = {treatment: booking.treatment, date: booking.date, patient: booking.patient}
+          const exist = await bookingCollection.findOne(query)
+          if(exist){
+            return res.send({acknowledged: false})
+          }
+          const result = await bookingCollection.insertOne(booking);
+          res.send(result);
+        })
     }
     finally{
 
