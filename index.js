@@ -23,21 +23,40 @@ async function run() {
             res.send(services);
           });
 
+        // app.get('/available', async (req, res)=>{
+        //   const date = req.query.date;
+        //   const services= await servicesCollection.find().toArray()
+
+        //   const query = {date: date};
+        //   const bookings = await bookingCollection.find(query).toArray()
+
+        //   services.forEach(service=>{
+        //     const serviceBooking = bookings.filter(b=>b.treatment===service.name);
+        //     const booked = serviceBooking.map(s=>s.slot)
+        //     // service.booked = booked;
+        //     const availableSlots = service.slots.filter(s=>!booked.includes(s))
+        //     service.slots = availableSlots;
+        //   })
+        //   res.send(services)
+        // })
+
         app.get('/available', async (req, res)=>{
-          const date = req.query.date || 'May 11, 2022';
-          const services= await servicesCollection.find().toArray()
+          const date = req.query.date;
+          const services = await servicesCollection.find().toArray();
 
           const query = {date: date};
           const bookings = await bookingCollection.find(query).toArray()
 
           services.forEach(service=>{
-            const serviceBooking = bookings.filter(b=>b.treatment===service.name);
-            const booked = serviceBooking.map(s=>s.slot)
-            // service.booked = booked;
+            const serviceBooking = bookings.filter(b=>b.treatment === service.name);
+
+            const booked = serviceBooking.map(s=>s.slot);
             const availableSlots = service.slots.filter(s=>!booked.includes(s))
-            service.availableSlots = availableSlots;
+            
+            service.slots= availableSlots;
           })
           res.send(services)
+
         })
 
 
