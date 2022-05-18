@@ -1,10 +1,12 @@
 const express = require("express");
 const cors = require("cors");
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const jwt = require("jsonwebtoken");
 require("dotenv").config();
 const app = express();
 const port = process.env.PORT || 5000;
+
+const stripe = require("stripe")(process.env.SECRET_STRIP);
 
 app.use(cors());
 app.use(express.json());
@@ -42,6 +44,7 @@ async function run() {
       .collection("bookings");
     const userCollection = client.db("doctors_portal").collection("users");
     const doctorCollection = client.db("doctors_portal").collection("doctors");
+    const paymentCollection = client.db("doctors_portal").collection("payments");
 
     const verifyAdmin = async (req, res, next) => {
       const requester = req.decoded?.email;
@@ -60,6 +63,22 @@ async function run() {
       const cursor = servicesCollection.find(query).project({ name: 1 });
       const services = await cursor.toArray();
       res.send(services);
+    });
+
+    app.post("/create-payment-intent",verifyJWT, async (req, res) => {
+      const service = req.body;
+      const price = service.price;
+      const amount = price*100;
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: amount,
+        currency: "usd",
+        payment_method_types: ['card']
+        
+      });
+
+      res.send({
+        clientSecret: paymentIntent.client_secret,
+      });
     });
 
     app.get("/users", verifyJWT, async (req, res) => {
@@ -171,15 +190,46 @@ async function run() {
       res.send(result);
     });
 
-    app.get('/doctors', verifyJWT, verifyAdmin , async (req, res)=>{
-      const doctors = await doctorCollection.find().toArray();
-      res.send(doctors);
+    app.patch('/bookings/:id', async (req, res)=>{
+      const id = req.params.id;
+      const payment = req.body;
+      const query = { _id: ObjectId(id) };
+      const updateDoc = {
+        $set: {
+          paid: true,
+          transactionId: payment.transactionId
+
+
+        }
+      }
+      const updatedBooking = await bookingCollection.updateOne(query, updateDoc);
+      const result = await paymentCollection.insertOne(payment);
+      res.send(updatedBooking)
     })
 
-    app.post("/doctors", verifyJWT,verifyAdmin, async (req, res) => {
+    app.get("/bookings/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: ObjectId(id) };
+      const booking = await bookingCollection.findOne(query);
+      res.send(booking);
+    });
+
+    app.get("/doctors", verifyJWT, verifyAdmin, async (req, res) => {
+      const doctors = await doctorCollection.find().toArray();
+      res.send(doctors);
+    });
+
+    app.post("/doctors", verifyJWT, verifyAdmin, async (req, res) => {
       const doctor = req.body;
-        const result = await doctorCollection.insertOne(doctor);
-        res.send(result);
+      const result = await doctorCollection.insertOne(doctor);
+      res.send(result);
+    });
+
+    app.delete("/doctors/:email", verifyJWT, verifyAdmin, async (req, res) => {
+      const email = req.params.email;
+      const query = { email: email };
+      const result = await doctorCollection.deleteOne(query);
+      res.send(result);
     });
   } finally {
   }
